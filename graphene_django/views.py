@@ -35,8 +35,8 @@ def get_accepted_content_types(request):
             match = re.match(r'(^|;)q=(0(\.\d{,3})?|1(\.0{,3})?)(;|$)',
                              parts[1])
             if match:
-                return parts[0].strip(), float(match.group(2))
-        return parts[0].strip(), 1
+                return parts[0], float(match.group(2))
+        return parts[0], 1
 
     raw_content_types = request.META.get('HTTP_ACCEPT', '*/*').split(',')
     qualified_content_types = map(qualify, raw_content_types)
@@ -53,7 +53,7 @@ def instantiate_middleware(middlewares):
 
 
 class GraphQLView(View):
-    graphiql_version = '0.11.10'
+    graphiql_version = '0.10.2'
     graphiql_template = 'graphene/graphiql.html'
 
     schema = None
@@ -72,14 +72,14 @@ class GraphQLView(View):
         if middleware is None:
             middleware = graphene_settings.MIDDLEWARE
 
-        self.schema = self.schema or schema
+        self.schema = schema
         if middleware is not None:
             self.middleware = list(instantiate_middleware(middleware))
         self.executor = executor
         self.root_value = root_value
-        self.pretty = self.pretty or pretty
-        self.graphiql = self.graphiql or graphiql
-        self.batch = self.batch or batch
+        self.pretty = pretty
+        self.graphiql = graphiql
+        self.batch = batch
 
         assert isinstance(
             self.schema, GraphQLSchema), 'A Schema is required to be provided to GraphQLView.'
@@ -99,18 +99,29 @@ class GraphQLView(View):
     @method_decorator(ensure_csrf_cookie)
     def dispatch(self, request, *args, **kwargs):
         try:
-            if request.method.lower() not in ('get', 'post'):
+            if request.method.lower() not in ('get', 'post', 'options'):
                 raise HttpError(HttpResponseNotAllowed(
-                    ['GET', 'POST'], 'GraphQL only supports GET and POST requests.'))
+                    ['GET', 'POST', 'OPTIONS'], 'GraphQL only supports OPTIONS, GET and POST requests.'))
+            if request.method.lower() == 'options':
+                response = HttpResponse(
+                            status=200,
+
+                            )
+                response['Allow'] = "OPTIONS, GET, POST"
+                reponse['Content-Length'] = 0
+                return response
 
             data = self.parse_body(request)
             show_graphiql = self.graphiql and self.can_display_graphiql(
                 request, data)
 
             if self.batch:
-                responses = [self.get_response(request, entry) for entry in data]
-                result = '[{}]'.format(','.join([response[0] for response in responses]))
-                status_code = responses and max(responses, key=lambda response: response[1])[1] or 200
+                responses = [self.get_response(
+                    request, entry) for entry in data]
+                result = '[{}]'.format(
+                    ','.join([response[0] for response in responses]))
+                status_code = max(
+                    responses, key=lambda response: response[1])[1]
             else:
                 result, status_code = self.get_response(
                     request, data, show_graphiql)
@@ -280,13 +291,10 @@ class GraphQLView(View):
     @classmethod
     def request_wants_html(cls, request):
         accepted = get_accepted_content_types(request)
-        accepted_length = len(accepted)
-        # the list will be ordered in preferred first - so we have to make
-        # sure the most preferred gets the highest number
-        html_priority = accepted_length - accepted.index('text/html') if 'text/html' in accepted else 0
-        json_priority = accepted_length - accepted.index('application/json') if 'application/json' in accepted else 0
+        html_index = accepted.count('text/html')
+        json_index = accepted.count('application/json')
 
-        return html_priority > json_priority
+        return html_index > json_index
 
     @staticmethod
     def get_graphql_params(request, data):
