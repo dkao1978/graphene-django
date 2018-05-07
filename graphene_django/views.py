@@ -108,7 +108,7 @@ class GraphQLView(View):
 
                             )
                 response['Allow'] = "OPTIONS, GET, POST"
-                reponse['Content-Length'] = 0
+                response['Content-Length'] = 0
                 return response
 
             data = self.parse_body(request)
