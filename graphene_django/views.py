@@ -280,7 +280,7 @@ class GraphQLView(View):
 
     def execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
         if os.environ["DEBUGGING"] == 'True':
-            return our_execute_graphql_request(request, data, query, variables, operation_name, show_graphiql)
+            return self.our_execute_graphql_request(request, data, query, variables, operation_name, show_graphiql)
         if not query:
             if show_graphiql:
                 return None
