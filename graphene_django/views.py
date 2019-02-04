@@ -1,6 +1,7 @@
 import inspect
 import json
 import re
+import os
 
 import six
 from django.http import HttpResponse, HttpResponseNotAllowed
@@ -239,7 +240,47 @@ class GraphQLView(View):
     def execute(self, *args, **kwargs):
         return execute(self.schema, *args, **kwargs)
 
+    def our_execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
+        if not query:
+            if show_graphiql:
+                return None
+            raise HttpError(HttpResponseBadRequest(
+                'Must provide query string.'))
+
+        source = Source(query, name='GraphQL request')
+
+        document_ast = parse(source)
+        validation_errors = validate(self.schema, document_ast)
+        if validation_errors:
+            return ExecutionResult(
+                errors=validation_errors,
+                invalid=True,
+            )
+
+        if request.method.lower() == 'get':
+            operation_ast = get_operation_ast(document_ast, operation_name)
+            if operation_ast and operation_ast.operation != 'query':
+                if show_graphiql:
+                    return None
+
+                raise HttpError(HttpResponseNotAllowed(
+                    ['POST'], 'Can only perform a {} operation from a POST request.'.format(
+                        operation_ast.operation)
+                ))
+
+        return self.execute(
+            document_ast,
+            root_value=self.get_root_value(request),
+            variable_values=variables,
+            operation_name=operation_name,
+            context_value=self.get_context(request),
+            middleware=self.get_middleware(request),
+            executor=self.executor,
+        )
+
     def execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
+        if os.environ["DEBUGGING"] == 'True':
+            return our_execute_graphql_request(request, data, query, variables, operation_name, show_graphiql)
         if not query:
             if show_graphiql:
                 return None
