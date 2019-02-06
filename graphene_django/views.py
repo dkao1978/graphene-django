@@ -151,6 +151,7 @@ class GraphQLView(View):
             response.content = self.json_encode(request, {
                 'errors': [self.format_error(e)]
             })
+
             return response
 
     def get_response(self, request, data, show_graphiql=False):
@@ -240,7 +241,7 @@ class GraphQLView(View):
     def execute(self, *args, **kwargs):
         return execute(self.schema, *args, **kwargs)
 
-    def our_execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
+    def escaped_execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
         if not query:
             if show_graphiql:
                 return None
@@ -279,8 +280,8 @@ class GraphQLView(View):
         )
 
     def execute_graphql_request(self, request, data, query, variables, operation_name, show_graphiql=False):
-        if os.environ["DEBUGGING"] == 'True':
-            return self.our_execute_graphql_request(request, data, query, variables, operation_name, show_graphiql)
+        if os.getenv('DEBUG_ESCAPE_GRAPHQL', False) == 'True':
+            return self.escaped_execute_graphql_request(request, data, query, variables, operation_name, show_graphiql)
         if not query:
             if show_graphiql:
                 return None
